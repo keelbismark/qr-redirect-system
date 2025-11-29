@@ -1,0 +1,195 @@
+<!-- public/admin/stats-export.html -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Экспорт — QR Redirect</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="app-layout">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <a href="index.html" class="logo"><div class="logo-icon">Q</div>QR Redirect</a>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <a href="index.html" class="nav-item"><span class="nav-item-icon">📊</span>Дашборд</a>
+                    <a href="links.html" class="nav-item active"><span class="nav-item-icon">🔗</span>Все ссылки</a>
+                    <a href="qr-generator.html" class="nav-item"><span class="nav-item-icon">🎨</span>Генератор QR</a>
+                </div>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <div class="page-container">
+                <div class="page-header">
+                    <div class="page-header-row">
+                        <div>
+                            <h1 class="page-title">Экспорт данных</h1>
+                            <p class="page-subtitle">Скачайте статистику в формате CSV</p>
+                        </div>
+                        <a href="links.html" class="btn btn-ghost">← Назад</a>
+                    </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px;">
+                    <!-- Export all links -->
+                    <div class="card">
+                        <h3 style="margin-bottom:16px;">📋 Все ссылки</h3>
+                        <p style="color:var(--text-secondary);margin-bottom:20px;font-size:0.9375rem;">
+                            Экспорт списка всех ваших ссылок с количеством переходов.
+                        </p>
+                        <a href="/api/stats/export-all" class="btn btn-primary" download id="export-all">
+                            📥 Скачать CSV
+                        </a>
+                    </div>
+
+                    <!-- Export clicks for specific link -->
+                    <div class="card">
+                        <h3 style="margin-bottom:16px;">📊 Переходы по ссылке</h3>
+                        <p style="color:var(--text-secondary);margin-bottom:20px;font-size:0.9375rem;">
+                            Детальная статистика переходов для выбранной ссылки.
+                        </p>
+
+                        <div class="form-group">
+                            <label>Выберите ссылку</label>
+                            <select id="link-select">
+                                <option value="">Загрузка...</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Период</label>
+                            <select id="period-select">
+                                <option value="">Всё время</option>
+                                <option value="7">Последние 7 дней</option>
+                                <option value="30" selected>Последние 30 дней</option>
+                                <option value="90">Последние 90 дней</option>
+                                <option value="365">Последний год</option>
+                            </select>
+                        </div>
+
+                        <button class="btn btn-primary" id="export-clicks" disabled>
+                            📥 Скачать CSV
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Preview -->
+                <div class="card" style="margin-top:24px;">
+                    <h3 style="margin-bottom:16px;">ℹ️ Что включено в экспорт</h3>
+
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:24px;">
+                        <div>
+                            <h4 style="font-size:0.875rem;margin-bottom:12px;color:var(--text-secondary);">Экспорт ссылок</h4>
+                            <ul style="list-style:none;font-size:0.875rem;color:var(--text-secondary);">
+                                <li style="padding:4px 0;">✓ Slug</li>
+                                <li style="padding:4px 0;">✓ Целевой URL</li>
+                                <li style="padding:4px 0;">✓ Комментарий</li>
+                                <li style="padding:4px 0;">✓ Количество переходов</li>
+                                <li style="padding:4px 0;">✓ Статус (активна/неактивна)</li>
+                                <li style="padding:4px 0;">✓ Дата создания</li>
+                            </ul>
+                        </div>
+
+                        <div>
+                            <h4 style="font-size:0.875rem;margin-bottom:12px;color:var(--text-secondary);">Экспорт переходов</h4>
+                            <ul style="list-style:none;font-size:0.875rem;color:var(--text-secondary);">
+                                <li style="padding:4px 0;">✓ Дата и время</li>
+                                <li style="padding:4px 0;">✓ IP-адрес</li>
+                                <li style="padding:4px 0;">✓ Страна</li>
+                                <li style="padding:4px 0;">✓ Город</li>
+                                <li style="padding:4px 0;">✓ Устройство</li>
+                                <li style="padding:4px 0;">✓ Браузер</li>
+                                <li style="padding:4px 0;">✓ ОС</li>
+                                <li style="padding:4px 0;">✓ Источник (Referrer)</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        (function() {
+            var QR = window.QRAdmin;
+            if (!QR.isAuthenticated()) { location.href = 'login.html'; return; }
+
+            var selectedLink = null;
+
+            // Auth header for downloads
+            var token = localStorage.getItem('access_token');
+
+            document.getElementById('export-all').onclick = async function(e) {
+                e.preventDefault();
+
+                try {
+                    var res = await fetch('/api/stats/export-all', {
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+
+                    if (!res.ok) throw new Error('Ошибка экспорта');
+
+                    var blob = await res.blob();
+                    var url = URL.createObjectURL(blob);
+                    var a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'all-links.csv';
+                    a.click();
+
+                    QR.showAlert('Файл скачан!');
+                } catch (err) {
+                    QR.showAlert(err.message, 'error');
+                }
+            };
+
+            // Load links
+            QR.api('/redirects').then(function(links) {
+                var select = document.getElementById('link-select');
+                select.innerHTML = '<option value="">— Выберите —</option>';
+                links.forEach(function(l) {
+                    select.innerHTML += '<option value="' + l.id + '">/qr/' + QR.escapeHtml(l.slug) + '</option>';
+                });
+            });
+
+            // Link select
+            document.getElementById('link-select').onchange = function() {
+                selectedLink = this.value;
+                document.getElementById('export-clicks').disabled = !selectedLink;
+            };
+
+            // Export clicks
+            document.getElementById('export-clicks').onclick = async function() {
+                if (!selectedLink) return;
+
+                var days = document.getElementById('period-select').value;
+                var url = '/api/stats/export/' + selectedLink;
+                if (days) url += '?days=' + days;
+
+                try {
+                    var res = await fetch(url, {
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+
+                    if (!res.ok) throw new Error('Ошибка экспорта');
+
+                    var blob = await res.blob();
+                    var blobUrl = URL.createObjectURL(blob);
+                    var a = document.createElement('a');
+                    a.href = blobUrl;
+                    a.download = 'clicks-export.csv';
+                    a.click();
+
+                    QR.showAlert('Файл скачан!');
+                } catch (err) {
+                    QR.showAlert(err.message, 'error');
+                }
+            };
+        })();
+    </script>
+</body>
+</html>

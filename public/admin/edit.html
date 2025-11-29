@@ -1,0 +1,275 @@
+<!-- public/admin/edit.html -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Редактирование — QR Redirect</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="app-layout">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <a href="index.html" class="logo"><div class="logo-icon">Q</div>QR Redirect</a>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <a href="index.html" class="nav-item"><span class="nav-item-icon">📊</span>Дашборд</a>
+                    <a href="links.html" class="nav-item active"><span class="nav-item-icon">🔗</span>Все ссылки</a>
+                    <a href="qr-generator.html" class="nav-item"><span class="nav-item-icon">🎨</span>Генератор QR</a>
+                </div>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <div class="page-container" id="app">
+                <div class="loading"><div class="spinner"></div><p>Загрузка</p></div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        (function() {
+            var QR = window.QRAdmin;
+            if (!QR.isAuthenticated()) { location.href = 'login.html'; return; }
+
+            var id = new URLSearchParams(location.search).get('id');
+            if (!id) { location.href = 'links.html'; return; }
+
+            var redirect = null;
+            var folders = [];
+
+            async function init() {
+                try {
+                    [redirect, folders] = await Promise.all([
+                        QR.api('/redirects/' + id),
+                        QR.api('/folders')
+                    ]);
+                    render();
+                } catch (err) {
+                    QR.showAlert(err.message, 'error');
+                    location.href = 'links.html';
+                }
+            }
+
+            function render() {
+                var folderOptions = '<option value="">Без папки</option>' +
+                    folders.map(function(f) {
+                        return '<option value="' + f.id + '"' + (redirect.folder_id == f.id ? ' selected' : '') + '>' + QR.escapeHtml(f.name) + '</option>';
+                    }).join('');
+
+                var expiresValue = '';
+                if (redirect.expires_at) {
+                    var d = new Date(redirect.expires_at);
+                    expiresValue = d.toISOString().slice(0, 16);
+                }
+
+                var html = '<div class="page-header"><div class="page-header-row">' +
+                    '<div><h1 class="page-title">Редактирование</h1>' +
+                    '<p class="page-subtitle">Изменение параметров ссылки</p></div>' +
+                    '<div class="page-actions">' +
+                    '<a href="stats.html?id=' + id + '" class="btn btn-secondary">📊 Статистика</a>' +
+                    '<a href="links.html" class="btn btn-ghost">← Назад</a>' +
+                    '</div></div></div>' +
+
+                    '<div class="card" style="max-width:640px;">' +
+
+                    '<!-- Постоянная ссылка -->' +
+                    '<div style="background:var(--bg);padding:16px;border-radius:var(--radius);margin-bottom:24px;">' +
+                    '<div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;">Постоянная ссылка (в QR-коде)</div>' +
+                    '<div style="display:flex;align-items:center;gap:12px;">' +
+                    '<code style="font-family:JetBrains Mono,monospace;font-size:0.9375rem;color:var(--accent);">' + location.origin + '/qr/' + QR.escapeHtml(redirect.slug) + '</code>' +
+                    '<button type="button" class="btn btn-sm btn-secondary" id="copy-link">📋 Копировать</button>' +
+                    '</div></div>' +
+
+                    '<form id="form">' +
+
+                    '<!-- Основное -->' +
+                    '<h3 style="margin-bottom:20px;">Основное</h3>' +
+
+                    '<div class="form-group">' +
+                    '<label>Целевой URL *</label>' +
+                    '<input type="url" id="url" value="' + QR.escapeHtml(redirect.target_url) + '" required>' +
+                    '<div id="url-error" class="input-error" style="display:none;"></div>' +
+                    '</div>' +
+
+                    '<div class="form-group">' +
+                    '<label>Папка</label>' +
+                    '<select id="folder">' + folderOptions + '</select>' +
+                    '</div>' +
+
+                    '<div class="form-group">' +
+                    '<label>Комментарий</label>' +
+                    '<textarea id="comment">' + QR.escapeHtml(redirect.comment || '') + '</textarea>' +
+                    '</div>' +
+
+                    '<div class="form-group">' +
+                    '<label class="checkbox-label">' +
+                    '<input type="checkbox" id="active"' + (redirect.is_active ? ' checked' : '') + '>' +
+                    '<span>Ссылка активна</span>' +
+                    '</label>' +
+                    '<div class="input-hint">Неактивные ссылки показывают страницу-заглушку</div>' +
+                    '</div>' +
+
+                    '<!-- Дополнительно -->' +
+                    '<h3 style="margin:32px 0 20px;">Дополнительно</h3>' +
+
+                    '<div class="form-grid form-grid-2">' +
+                    '<div class="form-group">' +
+                    '<label>Срок действия</label>' +
+                    '<input type="datetime-local" id="expires" value="' + expiresValue + '">' +
+                    '<div class="input-hint">Оставьте пустым для бессрочной</div>' +
+                    '</div>' +
+
+                    '<div class="form-group">' +
+                    '<label>Пароль</label>' +
+                    '<input type="text" id="password" placeholder="' + (redirect.password_hash ? '••••••••' : 'Без пароля') + '">' +
+                    '<div class="input-hint">' + (redirect.password_hash ? 'Оставьте пустым, чтобы сохранить текущий' : 'Введите для защиты') + '</div>' +
+                    '</div>' +
+                    '</div>' +
+
+                    '<!-- UTM -->' +
+                    '<h3 style="margin:32px 0 20px;">UTM-метки</h3>' +
+
+                    '<div class="form-grid form-grid-2">' +
+                    '<div class="form-group">' +
+                    '<label>utm_source</label>' +
+                    '<input type="text" id="utm-source" value="' + QR.escapeHtml(redirect.utm_source || '') + '" placeholder="qr">' +
+                    '</div>' +
+                    '<div class="form-group">' +
+                    '<label>utm_medium</label>' +
+                    '<input type="text" id="utm-medium" value="' + QR.escapeHtml(redirect.utm_medium || '') + '" placeholder="offline">' +
+                    '</div>' +
+                    '</div>' +
+
+                    '<div class="form-group">' +
+                    '<label>utm_campaign</label>' +
+                    '<input type="text" id="utm-campaign" value="' + QR.escapeHtml(redirect.utm_campaign || '') + '" placeholder="promo">' +
+                    '</div>' +
+
+                    '<!-- QR с логотипом -->' +
+                    '<h3 style="margin:32px 0 20px;">Логотип для QR</h3>' +
+
+                    '<div class="form-group">' +
+                    '<div class="logo-upload" id="logo-upload">' +
+                    (redirect.logo_url ?
+                        '<img src="/' + redirect.logo_url + '" class="logo-preview" id="logo-preview"><div class="logo-upload-text">Нажмите для замены</div>' :
+                        '<div class="logo-upload-text">📷 Нажмите для загрузки логотипа<br><small>PNG, JPG до 500KB</small></div>'
+                    ) +
+                    '</div>' +
+                    '<input type="file" id="logo-input" accept="image/*" style="display:none">' +
+                    '</div>' +
+
+                    '<div class="form-actions">' +
+                    '<button type="button" class="btn btn-danger" id="delete-btn">Удалить</button>' +
+                    '<div style="flex:1;"></div>' +
+                    '<a href="links.html" class="btn btn-secondary">Отмена</a>' +
+                    '<button type="submit" class="btn btn-primary">Сохранить</button>' +
+                    '</div>' +
+
+                    '</form></div>';
+
+                document.getElementById('app').innerHTML = html;
+                bindEvents();
+            }
+
+            function bindEvents() {
+                // Copy link
+                document.getElementById('copy-link').onclick = function() {
+                    QR.copyToClipboard(location.origin + '/qr/' + redirect.slug);
+                };
+
+                // Logo upload
+                var logoUpload = document.getElementById('logo-upload');
+                var logoInput = document.getElementById('logo-input');
+
+                logoUpload.onclick = function() { logoInput.click(); };
+
+                logoInput.onchange = async function() {
+                    if (!this.files[0]) return;
+
+                    var formData = new FormData();
+                    formData.append('logo', this.files[0]);
+
+                    try {
+                        var res = await fetch('/api/redirects/' + id + '/logo', {
+                            method: 'POST',
+                            headers: { 'Authorization': 'Bearer ' + localStorage.getItem('access_token') },
+                            body: formData
+                        });
+
+                        var data = await res.json();
+                        if (!res.ok) throw new Error(data.error);
+
+                        QR.showAlert('Логотип загружен!');
+
+                        // Update preview
+                        logoUpload.innerHTML = '<img src="/' + data.logoUrl + '" class="logo-preview"><div class="logo-upload-text">Нажмите для замены</div>';
+                        logoUpload.classList.add('has-logo');
+                    } catch (err) {
+                        QR.showAlert(err.message || 'Ошибка загрузки', 'error');
+                    }
+                };
+
+                // Delete
+                document.getElementById('delete-btn').onclick = function() {
+                    QR.showConfirm('Удалить эту ссылку? Действие необратимо.', async function() {
+                        try {
+                            await QR.api('/redirects/' + id, { method: 'DELETE' });
+                            QR.showAlert('Ссылка удалена');
+                            location.href = 'links.html';
+                        } catch (err) {
+                            QR.showAlert(err.message, 'error');
+                        }
+                    });
+                };
+
+                // Submit
+                document.getElementById('form').onsubmit = async function(e) {
+                    e.preventDefault();
+                    var btn = this.querySelector('button[type="submit"]');
+
+                    document.getElementById('url-error').style.display = 'none';
+
+                    btn.disabled = true;
+                    btn.textContent = 'Сохранение...';
+
+                    try {
+                        var data = {
+                            targetUrl: document.getElementById('url').value,
+                            folderId: document.getElementById('folder').value || null,
+                            comment: document.getElementById('comment').value,
+                            isActive: document.getElementById('active').checked,
+                            expiresAt: document.getElementById('expires').value || null,
+                            utmSource: document.getElementById('utm-source').value || null,
+                            utmMedium: document.getElementById('utm-medium').value || null,
+                            utmCampaign: document.getElementById('utm-campaign').value || null
+                        };
+
+                        // Password: only send if changed
+                        var pwd = document.getElementById('password').value;
+                        if (pwd) data.password = pwd;
+
+                        await QR.api('/redirects/' + id, { method: 'PUT', body: JSON.stringify(data) });
+                        QR.showAlert('Сохранено!');
+                        location.href = 'links.html';
+                    } catch (err) {
+                        if (err.data && err.data.errors && err.data.errors.targetUrl) {
+                            document.getElementById('url-error').textContent = err.data.errors.targetUrl;
+                            document.getElementById('url-error').style.display = 'block';
+                        } else {
+                            QR.showAlert(err.message, 'error');
+                        }
+                        btn.disabled = false;
+                        btn.textContent = 'Сохранить';
+                    }
+                };
+            }
+
+            init();
+        })();
+    </script>
+</body>
+</html>

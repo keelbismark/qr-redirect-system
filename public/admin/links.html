@@ -1,0 +1,282 @@
+<!-- public/admin/links.html -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ссылки — QR Redirect</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="app-layout">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <a href="index.html" class="logo"><div class="logo-icon">Q</div>QR Redirect</a>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <a href="index.html" class="nav-item"><span class="nav-item-icon">📊</span>Дашборд</a>
+                    <a href="links.html" class="nav-item active"><span class="nav-item-icon">🔗</span>Все ссылки</a>
+                    <a href="qr-generator.html" class="nav-item"><span class="nav-item-icon">🎨</span>Генератор QR</a>
+                </div>
+                <div class="nav-section">
+                    <div class="nav-section-title">Папки</div>
+                    <div id="folders-list"></div>
+                </div>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="user-avatar" id="user-avatar">A</div>
+                    <div class="user-details">
+                        <div class="user-name" id="user-name">Admin</div>
+                        <div class="user-email" id="user-email"></div>
+                    </div>
+                    <button class="btn btn-ghost btn-icon btn-sm" id="logout-btn">⎋</button>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <div class="page-container" id="app">
+                <div class="loading"><div class="spinner"></div><p>Загрузка</p></div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        (function() {
+            var QR = window.QRAdmin;
+            if (!QR.isAuthenticated()) { location.href = 'login.html'; return; }
+
+            var user = QR.getUser();
+            if (user) {
+                document.getElementById('user-name').textContent = user.name || user.email;
+                document.getElementById('user-email').textContent = user.email;
+                document.getElementById('user-avatar').textContent = (user.name || user.email).charAt(0).toUpperCase();
+            }
+            document.getElementById('logout-btn').onclick = QR.logout;
+
+            var currentFolder = null;
+            var currentSearch = '';
+            var currentStatus = '';
+            var selectedIds = [];
+            var allLinks = [];
+            var folders = [];
+
+            async function loadData() {
+                try {
+                    folders = await QR.api('/folders');
+                    renderFolders();
+                    await loadLinks();
+                } catch (err) {
+                    QR.showAlert(err.message, 'error');
+                }
+            }
+
+            function renderFolders() {
+                var html = '<div class="folder-item' + (!currentFolder ? ' active' : '') + '" data-id="">' +
+                    '<span class="folder-dot" style="background:#999"></span>Все ссылки</div>';
+
+                folders.forEach(function(f) {
+                    html += '<div class="folder-item' + (currentFolder == f.id ? ' active' : '') + '" data-id="' + f.id + '">' +
+                        '<span class="folder-dot" style="background:' + f.color + '"></span>' +
+                        QR.escapeHtml(f.name) +
+                        '<span class="folder-count">' + f.link_count + '</span></div>';
+                });
+
+                document.getElementById('folders-list').innerHTML = html;
+
+                document.querySelectorAll('.folder-item').forEach(function(el) {
+                    el.onclick = function() {
+                        currentFolder = this.dataset.id || null;
+                        document.querySelectorAll('.folder-item').forEach(function(x) { x.classList.remove('active'); });
+                        this.classList.add('active');
+                        loadLinks();
+                    };
+                });
+            }
+
+            async function loadLinks() {
+                var params = [];
+                if (currentFolder) params.push('folderId=' + currentFolder);
+                if (currentSearch) params.push('search=' + encodeURIComponent(currentSearch));
+                if (currentStatus) params.push('status=' + currentStatus);
+
+                try {
+                    allLinks = await QR.api('/redirects?' + params.join('&'));
+                    selectedIds = [];
+                    render();
+                } catch (err) {
+                    QR.showAlert(err.message, 'error');
+                }
+            }
+
+            function render() {
+                var html = '<div class="page-header"><div class="page-header-row">' +
+                    '<div><h1 class="page-title">Ссылки</h1><p class="page-subtitle">' + allLinks.length + ' записей</p></div>' +
+                    '<div class="page-actions">' +
+                    '<a href="stats-export.html" class="btn btn-secondary">📥 Экспорт</a>' +
+                    '<a href="create.html" class="btn btn-primary">+ Новая ссылка</a>' +
+                    '</div></div></div>' +
+
+                    '<div class="toolbar">' +
+                    '<div class="search-box"><input type="text" id="search" placeholder="Поиск..." value="' + QR.escapeHtml(currentSearch) + '"></div>' +
+                    '<select class="filter-select" id="status-filter">' +
+                    '<option value="">Все статусы</option>' +
+                    '<option value="active"' + (currentStatus === 'active' ? ' selected' : '') + '>Активные</option>' +
+                    '<option value="inactive"' + (currentStatus === 'inactive' ? ' selected' : '') + '>Неактивные</option>' +
+                    '</select>' +
+                    '<div class="bulk-actions' + (selectedIds.length ? '' : ' hidden') + '" id="bulk-actions">' +
+                    '<span>Выбрано: <strong id="selected-count">' + selectedIds.length + '</strong></span>' +
+                    '<button class="btn btn-sm btn-secondary" id="bulk-activate">Активировать</button>' +
+                    '<button class="btn btn-sm btn-secondary" id="bulk-deactivate">Деактивировать</button>' +
+                    '<button class="btn btn-sm btn-danger" id="bulk-delete">Удалить</button>' +
+                    '</div>' +
+                    '</div>';
+
+                if (allLinks.length === 0) {
+                    html += '<div class="table-container"><div class="empty-state">' +
+                        '<div class="empty-icon">📭</div><h3>Ссылок нет</h3><p>Создайте первую ссылку</p>' +
+                        '<a href="create.html" class="btn btn-primary">Создать</a></div></div>';
+                } else {
+                    html += '<div class="table-container"><div class="table-scroll"><table>' +
+                        '<thead><tr>' +
+                        '<th><input type="checkbox" id="select-all" class="row-checkbox"></th>' +
+                        '<th>Slug</th><th>Назначение</th><th>Папка</th><th>Статус</th><th>Переходы</th><th>Создана</th><th></th>' +
+                        '</tr></thead><tbody>';
+
+                    allLinks.forEach(function(l) {
+                        var isSelected = selectedIds.includes(l.id);
+                        var statusClass = 'status-active';
+                        var statusText = 'Активна';
+
+                        if (!l.is_active) {
+                            statusClass = 'status-inactive';
+                            statusText = 'Неактивна';
+                        } else if (l.expires_at && new Date(l.expires_at) < new Date()) {
+                            statusClass = 'status-expired';
+                            statusText = 'Истекла';
+                        } else if (l.password_hash) {
+                            statusClass = 'status-protected';
+                            statusText = '🔒 Защищена';
+                        }
+
+                        html += '<tr class="' + (isSelected ? 'selected' : '') + '" data-id="' + l.id + '">' +
+                            '<td><input type="checkbox" class="row-checkbox row-select" data-id="' + l.id + '"' + (isSelected ? ' checked' : '') + '></td>' +
+                            '<td class="slug-cell"><span class="slug">/qr/' + QR.escapeHtml(l.slug) + '</span>' +
+                            '<button class="copy-btn" data-copy="' + location.origin + '/qr/' + l.slug + '" title="Копировать">📋</button></td>' +
+                            '<td class="url-cell" title="' + QR.escapeHtml(l.target_url) + '">' + QR.escapeHtml(l.target_url) + '</td>' +
+                            '<td>' + (l.folder_name ? '<span class="folder-badge"><span class="folder-badge-dot" style="background:' + l.folder_color + '"></span>' + QR.escapeHtml(l.folder_name) + '</span>' : '—') + '</td>' +
+                            '<td><span class="status ' + statusClass + '"><span class="status-dot"></span>' + statusText + '</span></td>' +
+                            '<td class="clicks-cell">' + QR.formatNumber(l.click_count) + '<span class="clicks-unique"> / ' + QR.formatNumber(l.unique_clicks) + '</span></td>' +
+                            '<td class="date-cell">' + QR.formatDate(l.created_at) + '</td>' +
+                            '<td class="actions-cell">' +
+                            '<a href="edit.html?id=' + l.id + '" class="btn btn-sm btn-secondary">Изменить</a>' +
+                            '<a href="stats.html?id=' + l.id + '" class="btn btn-sm btn-secondary">📊</a>' +
+                            '</td></tr>';
+                    });
+
+                    html += '</tbody></table></div></div>';
+                }
+
+                document.getElementById('app').innerHTML = html;
+                bindEvents();
+            }
+
+            function bindEvents() {
+                // Search
+                var searchInput = document.getElementById('search');
+                if (searchInput) {
+                    searchInput.oninput = QR.debounce(function() {
+                        currentSearch = this.value;
+                        loadLinks();
+                    }, 300);
+                }
+
+                // Status filter
+                var statusFilter = document.getElementById('status-filter');
+                if (statusFilter) {
+                    statusFilter.onchange = function() {
+                        currentStatus = this.value;
+                        loadLinks();
+                    };
+                }
+
+                // Select all
+                var selectAll = document.getElementById('select-all');
+                if (selectAll) {
+                    selectAll.onchange = function() {
+                        selectedIds = this.checked ? allLinks.map(function(l) { return l.id; }) : [];
+                        render();
+                    };
+                }
+
+                // Row select
+                document.querySelectorAll('.row-select').forEach(function(cb) {
+                    cb.onchange = function() {
+                        var id = parseInt(this.dataset.id);
+                        if (this.checked) {
+                            if (!selectedIds.includes(id)) selectedIds.push(id);
+                        } else {
+                            selectedIds = selectedIds.filter(function(x) { return x !== id; });
+                        }
+                        updateBulkActions();
+                    };
+                });
+
+                // Copy buttons
+                document.querySelectorAll('.copy-btn').forEach(function(btn) {
+                    btn.onclick = function(e) {
+                        e.stopPropagation();
+                        QR.copyToClipboard(this.dataset.copy);
+                    };
+                });
+
+                // Bulk actions
+                var bulkActivate = document.getElementById('bulk-activate');
+                var bulkDeactivate = document.getElementById('bulk-deactivate');
+                var bulkDelete = document.getElementById('bulk-delete');
+
+                if (bulkActivate) {
+                    bulkActivate.onclick = function() { bulkAction('activate'); };
+                }
+                if (bulkDeactivate) {
+                    bulkDeactivate.onclick = function() { bulkAction('deactivate'); };
+                }
+                if (bulkDelete) {
+                    bulkDelete.onclick = function() {
+                        QR.showConfirm('Удалить ' + selectedIds.length + ' ссылок?', function() {
+                            bulkAction('delete');
+                        });
+                    };
+                }
+            }
+
+            function updateBulkActions() {
+                var bulk = document.getElementById('bulk-actions');
+                var count = document.getElementById('selected-count');
+                if (bulk) {
+                    bulk.classList.toggle('hidden', selectedIds.length === 0);
+                    if (count) count.textContent = selectedIds.length;
+                }
+            }
+
+            async function bulkAction(action) {
+                try {
+                    await QR.api('/redirects/bulk', {
+                        method: 'POST',
+                        body: JSON.stringify({ action: action, ids: selectedIds })
+                    });
+                    QR.showAlert('Готово!');
+                    loadLinks();
+                } catch (err) {
+                    QR.showAlert(err.message, 'error');
+                }
+            }
+
+            loadData();
+        })();
+    </script>
+</body>
+</html>

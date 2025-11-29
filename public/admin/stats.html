@@ -1,0 +1,216 @@
+<!-- public/admin/stats.html -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Статистика — QR Redirect</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="app-layout">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <a href="index.html" class="logo"><div class="logo-icon">Q</div>QR Redirect</a>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <a href="index.html" class="nav-item"><span class="nav-item-icon">📊</span>Дашборд</a>
+                    <a href="links.html" class="nav-item active"><span class="nav-item-icon">🔗</span>Все ссылки</a>
+                    <a href="qr-generator.html" class="nav-item"><span class="nav-item-icon">🎨</span>Генератор QR</a>
+                </div>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <div class="page-container" id="app">
+                <div class="loading"><div class="spinner"></div><p>Загрузка</p></div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        (function() {
+            var QR = window.QRAdmin;
+            if (!QR.isAuthenticated()) { location.href = 'login.html'; return; }
+
+            var id = new URLSearchParams(location.search).get('id');
+            var days = parseInt(new URLSearchParams(location.search).get('days')) || 30;
+            if (!id) { location.href = 'links.html'; return; }
+
+            async function init() {
+                try {
+                    var data = await QR.api('/stats/redirect/' + id + '?days=' + days);
+                    render(data);
+                } catch (err) {
+                    document.getElementById('app').innerHTML = '<div class="empty-state"><h3>Ошибка</h3><p>' + QR.escapeHtml(err.message) + '</p></div>';
+                }
+            }
+
+            function render(data) {
+                var r = data.redirect;
+                var s = data.stats;
+
+                var deviceLabels = {
+                    mobile: '📱 Мобильные',
+                    desktop: '💻 Десктоп',
+                    tablet: '📟 Планшет',
+                    bot: '🤖 Боты',
+                    unknown: '❓ Другое'
+                };
+
+                var html = '<div class="page-header"><div class="page-header-row">' +
+                    '<div>' +
+                    '<h1 class="page-title">Статистика</h1>' +
+                    '<div style="margin-top:8px;display:flex;align-items:center;gap:12px;">' +
+                    '<code style="font-family:JetBrains Mono,monospace;font-size:0.875rem;color:var(--accent);background:var(--accent-light);padding:6px 12px;border-radius:6px;">' +
+                    location.origin + '/qr/' + QR.escapeHtml(r.slug) + '</code>' +
+                    '<button class="btn btn-sm btn-secondary" id="copy-link">📋</button>' +
+                    '</div>' +
+                    (r.comment ? '<p style="color:var(--text-muted);margin-top:8px;">' + QR.escapeHtml(r.comment) + '</p>' : '') +
+                    '</div>' +
+                    '<div class="page-actions">' +
+                    '<a href="/api/stats/export/' + id + '?days=' + days + '" class="btn btn-secondary" download>📥 Экспорт CSV</a>' +
+                    '<a href="edit.html?id=' + id + '" class="btn btn-secondary">✏️ Изменить</a>' +
+                    '<a href="links.html" class="btn btn-ghost">← Назад</a>' +
+                    '</div></div></div>' +
+
+                    // Period tabs
+                    '<div class="period-tabs" style="margin-bottom:24px;">';
+                [7, 30, 90, 365].forEach(function(d) {
+                    html += '<a href="?id=' + id + '&days=' + d + '" class="period-tab' + (days === d ? ' active' : '') + '">' +
+                        (d === 365 ? 'Год' : d + ' дн') + '</a>';
+                });
+                html += '</div>' +
+
+                    // Stats cards
+                    '<div class="stats-grid">' +
+                    '<div class="stat-card"><div class="stat-value">' + QR.formatNumber(s.totalClicks) + '</div><div class="stat-label">Всего переходов</div></div>' +
+                    '<div class="stat-card"><div class="stat-value">' + QR.formatNumber(s.uniqueClicks) + '</div><div class="stat-label">Уникальных</div></div>' +
+                    '<div class="stat-card"><div class="stat-value">' + QR.formatNumber(s.periodClicks) + '</div><div class="stat-label">За ' + days + ' дн</div></div>' +
+                    '<div class="stat-card"><div class="stat-value">' + (s.periodClicks > 0 ? (s.periodClicks / days).toFixed(1) : '0') + '</div><div class="stat-label">В среднем/день</div></div>' +
+                    '</div>' +
+
+                    '<div class="charts-grid">';
+
+                // Устройства
+                html += '<div class="chart-card"><div class="chart-title">📱 Устройства</div>';
+                if (s.byDevice && s.byDevice.length) {
+                    var maxD = Math.max.apply(null, s.byDevice.map(function(x) { return x.count; }));
+                    html += '<div class="bar-list">';
+                    s.byDevice.forEach(function(item) {
+                        var pct = maxD > 0 ? (item.count / maxD * 100) : 0;
+                        html += '<div class="bar-item"><span class="bar-label">' + (deviceLabels[item.device_type] || item.device_type) + '</span>' +
+                            '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%"></div></div>' +
+                            '<span class="bar-value">' + QR.formatNumber(item.count) + '</span></div>';
+                    });
+                    html += '</div>';
+                } else {
+                    html += '<p style="color:var(--text-muted);">Нет данных</p>';
+                }
+                html += '</div>';
+
+                // Браузеры
+                html += '<div class="chart-card"><div class="chart-title">🌐 Браузеры</div>';
+                if (s.byBrowser && s.byBrowser.length) {
+                    var maxB = Math.max.apply(null, s.byBrowser.map(function(x) { return x.count; }));
+                    html += '<div class="bar-list">';
+                    s.byBrowser.forEach(function(item) {
+                        var pct = maxB > 0 ? (item.count / maxB * 100) : 0;
+                        html += '<div class="bar-item"><span class="bar-label">' + QR.escapeHtml(item.browser || '—') + '</span>' +
+                            '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%"></div></div>' +
+                            '<span class="bar-value">' + QR.formatNumber(item.count) + '</span></div>';
+                    });
+                    html += '</div>';
+                } else {
+                    html += '<p style="color:var(--text-muted);">Нет данных</p>';
+                }
+                html += '</div>';
+
+                // ОС
+                html += '<div class="chart-card"><div class="chart-title">💻 Операционные системы</div>';
+                if (s.byOs && s.byOs.length) {
+                    var maxO = Math.max.apply(null, s.byOs.map(function(x) { return x.count; }));
+                    html += '<div class="bar-list">';
+                    s.byOs.forEach(function(item) {
+                        var pct = maxO > 0 ? (item.count / maxO * 100) : 0;
+                        html += '<div class="bar-item"><span class="bar-label">' + QR.escapeHtml(item.os || '—') + '</span>' +
+                            '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%"></div></div>' +
+                            '<span class="bar-value">' + QR.formatNumber(item.count) + '</span></div>';
+                    });
+                    html += '</div>';
+                } else {
+                    html += '<p style="color:var(--text-muted);">Нет данных</p>';
+                }
+                html += '</div>';
+
+                // Страны
+                html += '<div class="chart-card"><div class="chart-title">🌍 Страны</div>';
+                if (s.byCountry && s.byCountry.length) {
+                    var maxC = Math.max.apply(null, s.byCountry.map(function(x) { return x.count; }));
+                    html += '<div class="bar-list">';
+                    s.byCountry.forEach(function(item) {
+                        var pct = maxC > 0 ? (item.count / maxC * 100) : 0;
+                        html += '<div class="bar-item"><span class="bar-label">' + QR.escapeHtml(item.country_name || item.country_code || '—') + '</span>' +
+                            '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%"></div></div>' +
+                            '<span class="bar-value">' + QR.formatNumber(item.count) + '</span></div>';
+                    });
+                    html += '</div>';
+                } else {
+                    html += '<p style="color:var(--text-muted);">Нет данных</p>';
+                }
+                html += '</div>';
+
+                // Города
+                html += '<div class="chart-card"><div class="chart-title">🏙️ Города</div>';
+                if (s.byCity && s.byCity.length) {
+                    var maxCity = Math.max.apply(null, s.byCity.map(function(x) { return x.count; }));
+                    html += '<div class="bar-list">';
+                    s.byCity.forEach(function(item) {
+                        var pct = maxCity > 0 ? (item.count / maxCity * 100) : 0;
+                        var label = item.city || '—';
+                        if (item.country_name) label += ', ' + item.country_name;
+                        html += '<div class="bar-item"><span class="bar-label" title="' + QR.escapeHtml(label) + '">' + QR.escapeHtml(item.city || '—') + '</span>' +
+                            '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%"></div></div>' +
+                            '<span class="bar-value">' + QR.formatNumber(item.count) + '</span></div>';
+                    });
+                    html += '</div>';
+                } else {
+                    html += '<p style="color:var(--text-muted);">Нет данных</p>';
+                }
+                html += '</div>';
+
+                // По дням
+                html += '<div class="chart-card" style="grid-column:span 2;"><div class="chart-title">📅 По дням</div>';
+                if (s.byDay && s.byDay.length) {
+                    html += '<div style="overflow-x:auto;"><table style="width:100%;min-width:auto;">' +
+                        '<thead><tr><th>Дата</th><th style="text-align:right;">Переходы</th><th style="text-align:right;">Уникальные</th></tr></thead><tbody>';
+                    s.byDay.slice().reverse().slice(0, 14).forEach(function(item) {
+                        html += '<tr>' +
+                            '<td>' + new Date(item.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', weekday: 'short' }) + '</td>' +
+                            '<td style="text-align:right;font-weight:600;">' + QR.formatNumber(item.clicks) + '</td>' +
+                            '<td style="text-align:right;color:var(--text-muted);">' + QR.formatNumber(item.unique_clicks) + '</td>' +
+                            '</tr>';
+                    });
+                    html += '</tbody></table></div>';
+                } else {
+                    html += '<p style="color:var(--text-muted);">Нет данных за период</p>';
+                }
+                html += '</div>';
+
+                html += '</div>'; // charts-grid
+
+                document.getElementById('app').innerHTML = html;
+
+                // Copy link
+                document.getElementById('copy-link').onclick = function() {
+                    QR.copyToClipboard(location.origin + '/qr/' + r.slug);
+                };
+            }
+
+            init();
+        })();
+    </script>
+</body>
+</html>

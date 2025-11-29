@@ -1,0 +1,295 @@
+<!-- public/admin/qr-generator.html -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Генератор QR — QR Redirect</title>
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .preview-wrapper {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 40px;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 360px;
+            position: sticky;
+            top: 24px;
+        }
+        
+        .qr-final {
+            max-width: 100%;
+            border-radius: 12px;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .color-input-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border: 1px solid var(--border);
+            padding: 6px;
+            border-radius: var(--radius);
+            background: var(--bg-elevated);
+        }
+
+        .color-input-container input[type="color"] {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            border: none;
+            background: none;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        .color-input-container input[type="text"] {
+            border: none;
+            padding: 0;
+            font-family: 'JetBrains Mono', monospace;
+            text-transform: uppercase;
+            color: var(--text);
+            outline: none;
+            box-shadow: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-layout">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header"><a href="index.html" class="logo"><div class="logo-icon">Q</div>QR Redirect</a></div>
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <a href="index.html" class="nav-item active">
+                        <span class="nav-item-icon">📊</span>
+                        Дашборд
+                    </a>
+                    <a href="links.html" class="nav-item">
+                        <span class="nav-item-icon">🔗</span>
+                        Все ссылки
+                    </a>
+                    <a href="qr-generator.html" class="nav-item">
+                        <span class="nav-item-icon">🎨</span>
+                        Генератор QR
+                    </a>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <div class="page-container">
+                <div class="page-header">
+                    <h1 class="page-title">Генератор QR</h1>
+                    <p class="page-subtitle">Создание индивидуального дизайна</p>
+                </div>
+
+                <div class="generator-grid">
+                    <!-- Настройки -->
+                    <div class="card form-card" style="max-width: 100%;">
+                        <div class="form-group">
+                            <label>Целевая ссылка</label>
+                            <select id="slug-select">
+                                <option value="">Загрузка...</option>
+                            </select>
+                            <div id="url-display" class="code-display" style="display:none;margin-top:12px;"></div>
+                        </div>
+
+                        <h3 style="font-size:0.9rem; font-weight:600; margin: 24px 0 16px; color:var(--text);">Геометрия</h3>
+                        
+                        <div class="form-grid-2 form-grid">
+                            <div class="form-group">
+                                <label>Стиль модулей</label>
+                                <select id="style">
+                                    <option value="square">Квадраты (Классика)</option>
+                                    <option value="rounded">Скруглённые (Modern)</option>
+                                    <option value="dots">Точки (Air)</option>
+                                    <option value="liquid">Жидкий (Creative)</option>
+                                    <option value="classy">Элегантный (Soft)</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Форма глаз (углов)</label>
+                                <select id="eye-style">
+                                    <option value="square">Квадратные</option>
+                                    <option value="rounded">Скруглённые</option>
+                                    <option value="circle">Круглые</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <h3 style="font-size:0.9rem; font-weight:600; margin: 8px 0 16px; color:var(--text);">Цвета</h3>
+
+                        <div class="form-grid-2 form-grid">
+                            <div class="form-group">
+                                <label>Цвет QR</label>
+                                <div class="color-input-container">
+                                    <input type="color" id="fg-color" value="#000000">
+                                    <input type="text" id="fg-text" value="#000000" maxlength="7">
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Цвет фона</label>
+                                <div class="color-input-container">
+                                    <input type="color" id="bg-color" value="#FFFFFF">
+                                    <input type="text" id="bg-text" value="#FFFFFF" maxlength="7">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group" style="margin-top:12px;">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="with-logo"> 
+                                <span>Добавить логотип в центр</span>
+                            </label>
+                            <p class="form-hint">Логотип берется из настроек самой ссылки (Редактировать → Логотип)</p>
+                        </div>
+
+                        <div class="form-actions">
+                            <button id="gen-btn" class="btn btn-primary" style="width:100%; padding:12px;">Обновить QR-код</button>
+                        </div>
+                    </div>
+
+                    <!-- Превью -->
+                    <div>
+                        <div class="preview-wrapper">
+                            <div id="placeholder" style="color:var(--text-muted); text-align:center;">
+                                <div style="font-size:2rem; margin-bottom:8px;">⬚</div>
+                                Выберите ссылку и<br>нажмите "Обновить"
+                            </div>
+                            <img id="qr-img" class="qr-final" style="display:none">
+                        </div>
+                        
+                        <div class="qr-actions" id="actions" style="display:none; margin-top:16px; justify-content:center;">
+                            <button id="dl-png" class="btn btn-secondary">📥 Скачать PNG</button>
+                            <button id="dl-svg" class="btn btn-secondary">📐 Скачать SVG</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script src="js/sidebar.js"></script>
+    <script>
+        (function() {
+            var QR = window.QRAdmin;
+            if (!QR.isAuthenticated()) return location.href = 'login.html';
+
+            var slug = '', qrUrl = '';
+
+            // Sync Colors inputs
+            function bindColor(pickerId, textId) {
+                var p = document.getElementById(pickerId);
+                var t = document.getElementById(textId);
+                p.oninput = function() { t.value = p.value.toUpperCase(); }
+                t.oninput = function() { if(/^#[0-9A-F]{6}$/i.test(t.value)) p.value = t.value; }
+            }
+            bindColor('fg-color', 'fg-text');
+            bindColor('bg-color', 'bg-text');
+
+            // Load links
+            QR.api('/redirects').then(list => {
+                var sel = document.getElementById('slug-select');
+                sel.innerHTML = '<option value="">Выберите ссылку</option>';
+                list.forEach(r => sel.innerHTML += `<option value="${r.slug}" data-logo="${!!r.logo_url}">${r.slug}</option>`);
+            });
+
+            // Select logic
+            document.getElementById('slug-select').onchange = function() {
+                slug = this.value;
+                var opt = this.options[this.selectedIndex];
+                var hasLogo = opt.dataset.logo === 'true';
+                var check = document.getElementById('with-logo');
+                
+                check.disabled = !hasLogo;
+                if (!hasLogo) check.checked = false;
+
+                var disp = document.getElementById('url-display');
+                if(slug) {
+                    disp.textContent = location.origin + '/qr/' + slug;
+                    disp.style.display = 'block';
+                } else {
+                    disp.style.display = 'none';
+                }
+            };
+
+            // Generate
+            document.getElementById('gen-btn').onclick = async function() {
+                if (!slug) return QR.showAlert('Сначала выберите ссылку', 'error');
+
+                var style = document.getElementById('style').value;
+                var eye = document.getElementById('eye-style').value;
+                var fg = document.getElementById('fg-color').value.replace('#','');
+                var bg = document.getElementById('bg-color').value.replace('#','');
+                var logo = document.getElementById('with-logo').checked;
+
+                var btn = this;
+                btn.disabled = true;
+                btn.textContent = 'Генерация...';
+
+                try {
+                    var url = `/api/qr/generate/${slug}?style=${style}&eyeStyle=${eye}&color=${fg}&bg=${bg}&withLogo=${logo}&format=base64`;
+                    
+                    // Direct fetch to avoid path issues
+                    var res = await fetch(url, { 
+                        headers: { 'Authorization': 'Bearer ' + localStorage.getItem('access_token') } 
+                    });
+                    var data = await res.json();
+
+                    if(data.error) throw new Error(data.error);
+
+                    var img = document.getElementById('qr-img');
+                    img.src = data.qr;
+                    img.style.display = 'block';
+                    document.getElementById('placeholder').style.display = 'none';
+                    document.getElementById('actions').style.display = 'flex';
+                    qrUrl = data.qr;
+
+                } catch (e) {
+                    QR.showAlert('Ошибка генерации', 'error');
+                }
+                btn.disabled = false;
+                btn.textContent = 'Обновить QR-код';
+            };
+
+            // Download PNG
+            document.getElementById('dl-png').onclick = function() {
+                var a = document.createElement('a');
+                a.href = qrUrl;
+                a.download = `qr-${slug}.png`;
+                a.click();
+            };
+
+            // Download SVG
+            document.getElementById('dl-svg').onclick = async function() {
+                if (!slug) return;
+                var style = document.getElementById('style').value;
+                var eye = document.getElementById('eye-style').value;
+                var fg = document.getElementById('fg-color').value.replace('#','');
+                var bg = document.getElementById('bg-color').value.replace('#','');
+                
+                try {
+                    var url = `/api/qr/generate/${slug}?style=${style}&eyeStyle=${eye}&color=${fg}&bg=${bg}&format=svg`;
+                    var res = await fetch(url, { 
+                        headers: { 'Authorization': 'Bearer ' + localStorage.getItem('access_token') } 
+                    });
+                    var txt = await res.text();
+                    var blob = new Blob([txt], {type: 'image/svg+xml'});
+                    var a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = `qr-${slug}.svg`;
+                    a.click();
+                } catch(e) {
+                    QR.showAlert('Ошибка скачивания', 'error');
+                }
+            };
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,203 @@
+<!-- public/admin/index.html -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Redirect</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="app-layout">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <a href="index.html" class="logo">
+                    <div class="logo-icon">Q</div>
+                    QR Redirect
+                </a>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <a href="index.html" class="nav-item active">
+                        <span class="nav-item-icon">📊</span>
+                        Дашборд
+                    </a>
+                    <a href="links.html" class="nav-item">
+                        <span class="nav-item-icon">🔗</span>
+                        Все ссылки
+                    </a>
+                    <a href="qr-generator.html" class="nav-item">
+                        <span class="nav-item-icon">🎨</span>
+                        Генератор QR
+                    </a>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-title">Папки</div>
+                    <div id="folders-list"></div>
+                    <div class="add-folder-btn" id="add-folder-btn">
+                        <span>+</span> Новая папка
+                    </div>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="user-avatar" id="user-avatar">A</div>
+                    <div class="user-details">
+                        <div class="user-name" id="user-name">Admin</div>
+                        <div class="user-email" id="user-email">admin@example.com</div>
+                    </div>
+                    <button class="btn btn-ghost btn-icon btn-sm" id="logout-btn" title="Выйти">⎋</button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main content -->
+        <main class="main-content">
+            <div class="page-container" id="app">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Загрузка</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        (function() {
+            var QR = window.QRAdmin;
+
+            if (!QR.isAuthenticated()) {
+                location.href = 'login.html';
+                return;
+            }
+
+            // User info
+            var user = QR.getUser();
+            if (user) {
+                document.getElementById('user-name').textContent = user.name || user.email;
+                document.getElementById('user-email').textContent = user.email;
+                document.getElementById('user-avatar').textContent = (user.name || user.email).charAt(0).toUpperCase();
+            }
+
+            document.getElementById('logout-btn').onclick = QR.logout;
+
+            // Load data
+            async function init() {
+                try {
+                    var [stats, folders, links] = await Promise.all([
+                        QR.api('/stats/overview'),
+                        QR.api('/folders'),
+                        QR.api('/redirects?limit=5')
+                    ]);
+
+                    renderFolders(folders);
+                    renderDashboard(stats, links);
+                } catch (err) {
+                    document.getElementById('app').innerHTML = '<div class="empty-state"><h3>Ошибка загрузки</h3><p>' + QR.escapeHtml(err.message) + '</p></div>';
+                }
+            }
+
+            function renderFolders(folders) {
+                var html = folders.map(function(f) {
+                    return '<div class="folder-item" data-id="' + f.id + '">' +
+                        '<span class="folder-dot" style="background:' + f.color + '"></span>' +
+                        '<span>' + QR.escapeHtml(f.name) + '</span>' +
+                        '<span class="folder-count">' + f.link_count + '</span>' +
+                        '</div>';
+                }).join('');
+
+                document.getElementById('folders-list').innerHTML = html;
+            }
+
+            function renderDashboard(stats, links) {
+                var html = '<div class="page-header">' +
+                    '<div class="page-header-row">' +
+                    '<div><h1 class="page-title">Дашборд</h1><p class="page-subtitle">Обзор активности</p></div>' +
+                    '<a href="create.html" class="btn btn-primary">+ Новая ссылка</a>' +
+                    '</div></div>' +
+
+                    '<div class="stats-grid">' +
+                    '<div class="stat-card"><div class="stat-value">' + QR.formatNumber(stats.totalLinks) + '</div><div class="stat-label">Всего ссылок</div></div>' +
+                    '<div class="stat-card"><div class="stat-value">' + QR.formatNumber(stats.activeLinks) + '</div><div class="stat-label">Активных</div></div>' +
+                    '<div class="stat-card"><div class="stat-value">' + QR.formatNumber(stats.totalClicks) + '</div><div class="stat-label">Всего переходов</div></div>' +
+                    '<div class="stat-card"><div class="stat-value">' + QR.formatNumber(stats.todayClicks) + '</div><div class="stat-label">Сегодня</div></div>' +
+                    '</div>' +
+
+                    '<div class="card">' +
+                    '<div class="card-header"><h3 class="card-title">Топ ссылок</h3><a href="links.html" class="btn btn-ghost btn-sm">Все ссылки →</a></div>';
+
+                if (stats.topLinks && stats.topLinks.length) {
+                    html += '<table><thead><tr><th>Slug</th><th>Комментарий</th><th>Переходы</th></tr></thead><tbody>';
+                    stats.topLinks.forEach(function(l) {
+                        html += '<tr>' +
+                            '<td><span class="slug">/qr/' + QR.escapeHtml(l.slug) + '</span></td>' +
+                            '<td style="color:var(--text-muted);">' + QR.escapeHtml(l.comment || '—') + '</td>' +
+                            '<td class="clicks-cell">' + QR.formatNumber(l.clicks) + '</td>' +
+                            '</tr>';
+                    });
+                    html += '</tbody></table>';
+                } else {
+                    html += '<div class="empty-state"><p>Пока нет данных</p></div>';
+                }
+
+                html += '</div>';
+
+                document.getElementById('app').innerHTML = html;
+            }
+
+            // Add folder modal
+            document.getElementById('add-folder-btn').onclick = function() {
+                var modal = QR.showModal('<form id="folder-form">' +
+                    '<div class="form-group"><label>Название</label><input type="text" id="folder-name" required></div>' +
+                    '<div class="form-group"><label>Цвет</label>' +
+                    '<div class="color-presets">' +
+                    '<div class="color-preset active" style="background:#5c6ac4" data-c="#5c6ac4"></div>' +
+                    '<div class="color-preset" style="background:#2e7d32" data-c="#2e7d32"></div>' +
+                    '<div class="color-preset" style="background:#c62828" data-c="#c62828"></div>' +
+                    '<div class="color-preset" style="background:#ef6c00" data-c="#ef6c00"></div>' +
+                    '<div class="color-preset" style="background:#1565c0" data-c="#1565c0"></div>' +
+                    '<div class="color-preset" style="background:#6a1b9a" data-c="#6a1b9a"></div>' +
+                    '</div><input type="hidden" id="folder-color" value="#5c6ac4"></div>' +
+                    '<div class="modal-actions"><button type="button" class="btn btn-secondary" data-close>Отмена</button>' +
+                    '<button type="submit" class="btn btn-primary">Создать</button></div>' +
+                    '</form>', { title: 'Новая папка' });
+
+                modal.el.querySelector('[data-close]').onclick = modal.close;
+
+                modal.el.querySelectorAll('.color-preset').forEach(function(p) {
+                    p.onclick = function() {
+                        modal.el.querySelectorAll('.color-preset').forEach(function(x) { x.classList.remove('active'); });
+                        this.classList.add('active');
+                        document.getElementById('folder-color').value = this.dataset.c;
+                    };
+                });
+
+                document.getElementById('folder-form').onsubmit = async function(e) {
+                    e.preventDefault();
+                    try {
+                        await QR.api('/folders', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                name: document.getElementById('folder-name').value,
+                                color: document.getElementById('folder-color').value
+                            })
+                        });
+                        modal.close();
+                        QR.showAlert('Папка создана');
+                        init();
+                    } catch (err) {
+                        QR.showAlert(err.message, 'error');
+                    }
+                };
+            };
+
+            init();
+        })();
+    </script>
+</body>
+</html>

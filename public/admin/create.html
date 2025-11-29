@@ -1,0 +1,185 @@
+<!-- public/admin/create.html -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Новая ссылка — QR Redirect</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="app-layout">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <a href="index.html" class="logo"><div class="logo-icon">Q</div>QR Redirect</a>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <a href="index.html" class="nav-item"><span class="nav-item-icon">📊</span>Дашборд</a>
+                    <a href="links.html" class="nav-item active"><span class="nav-item-icon">🔗</span>Все ссылки</a>
+                    <a href="qr-generator.html" class="nav-item"><span class="nav-item-icon">🎨</span>Генератор QR</a>
+                </div>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <div class="page-container">
+                <div class="page-header">
+                    <div class="page-header-row">
+                        <div>
+                            <h1 class="page-title">Новая ссылка</h1>
+                            <p class="page-subtitle">Создайте короткую ссылку для QR-кода</p>
+                        </div>
+                        <a href="links.html" class="btn btn-ghost">← Назад</a>
+                    </div>
+                </div>
+
+                <div class="card" style="max-width:640px;">
+                    <form id="form">
+                        <!-- Основное -->
+                        <h3 style="margin-bottom:20px;">Основное</h3>
+
+                        <div class="form-group">
+                            <label>Slug *</label>
+                            <div class="input-group">
+                                <span class="input-prefix" id="prefix">/qr/</span>
+                                <input type="text" id="slug" placeholder="promo-2024" required>
+                            </div>
+                            <div class="input-hint">Только буквы, цифры, дефис. Нельзя изменить.</div>
+                            <div id="slug-error" class="input-error" style="display:none;"></div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Целевой URL *</label>
+                            <input type="url" id="url" placeholder="https://example.com/page" required>
+                            <div id="url-error" class="input-error" style="display:none;"></div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Папка <span class="label-optional">(опционально)</span></label>
+                            <select id="folder">
+                                <option value="">Без папки</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Комментарий <span class="label-optional">(опционально)</span></label>
+                            <textarea id="comment" placeholder="Где используется этот QR?"></textarea>
+                        </div>
+
+                        <!-- Дополнительно -->
+                        <h3 style="margin:32px 0 20px;">Дополнительно</h3>
+
+                        <div class="form-grid form-grid-2">
+                            <div class="form-group">
+                                <label>Срок действия</label>
+                                <input type="datetime-local" id="expires">
+                                <div class="input-hint">Оставьте пустым для бессрочной ссылки</div>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Пароль</label>
+                                <input type="text" id="password" placeholder="Оставьте пустым">
+                                <div class="input-hint">Защитите ссылку паролем</div>
+                            </div>
+                        </div>
+
+                        <!-- UTM -->
+                        <h3 style="margin:32px 0 20px;">UTM-метки</h3>
+
+                        <div class="form-grid form-grid-2">
+                            <div class="form-group">
+                                <label>utm_source</label>
+                                <input type="text" id="utm-source" placeholder="qr">
+                            </div>
+                            <div class="form-group">
+                                <label>utm_medium</label>
+                                <input type="text" id="utm-medium" placeholder="offline">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>utm_campaign</label>
+                            <input type="text" id="utm-campaign" placeholder="promo-winter">
+                        </div>
+
+                        <div class="form-actions">
+                            <a href="links.html" class="btn btn-secondary">Отмена</a>
+                            <button type="submit" class="btn btn-primary">Создать ссылку</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        (function() {
+            var QR = window.QRAdmin;
+            if (!QR.isAuthenticated()) { location.href = 'login.html'; return; }
+
+            document.getElementById('prefix').textContent = location.origin + '/qr/';
+
+            // Load folders
+            QR.api('/folders').then(function(folders) {
+                var select = document.getElementById('folder');
+                folders.forEach(function(f) {
+                    select.innerHTML += '<option value="' + f.id + '">' + QR.escapeHtml(f.name) + '</option>';
+                });
+            });
+
+            // Slug validation
+            document.getElementById('slug').oninput = function(e) {
+                var v = e.target.value.replace(/[^a-zA-Z0-9\-_]/g, '').toLowerCase();
+                e.target.value = v;
+            };
+
+            // Submit
+            document.getElementById('form').onsubmit = async function(e) {
+                e.preventDefault();
+                var btn = this.querySelector('button[type="submit"]');
+
+                document.getElementById('slug-error').style.display = 'none';
+                document.getElementById('url-error').style.display = 'none';
+
+                btn.disabled = true;
+                btn.textContent = 'Создание...';
+
+                try {
+                    var data = {
+                        slug: document.getElementById('slug').value,
+                        targetUrl: document.getElementById('url').value,
+                        folderId: document.getElementById('folder').value || null,
+                        comment: document.getElementById('comment').value,
+                        expiresAt: document.getElementById('expires').value || null,
+                        password: document.getElementById('password').value || null,
+                        utmSource: document.getElementById('utm-source').value || null,
+                        utmMedium: document.getElementById('utm-medium').value || null,
+                        utmCampaign: document.getElementById('utm-campaign').value || null
+                    };
+
+                    await QR.api('/redirects', { method: 'POST', body: JSON.stringify(data) });
+                    QR.showAlert('Ссылка создана!');
+                    location.href = 'links.html';
+                } catch (err) {
+                    if (err.data && err.data.errors) {
+                        if (err.data.errors.slug) {
+                            document.getElementById('slug-error').textContent = err.data.errors.slug;
+                            document.getElementById('slug-error').style.display = 'block';
+                        }
+                        if (err.data.errors.targetUrl) {
+                            document.getElementById('url-error').textContent = err.data.errors.targetUrl;
+                            document.getElementById('url-error').style.display = 'block';
+                        }
+                    } else {
+                        QR.showAlert(err.message, 'error');
+                    }
+                    btn.disabled = false;
+                    btn.textContent = 'Создать ссылку';
+                }
+            };
+        })();
+    </script>
+</body>
+</html>
