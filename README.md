@@ -48,7 +48,7 @@ Before you begin, ensure you have the following installed:
 
 4.  **Set up the database:**
 
-    Execute the SQL schema located in `schema.sql` (and potentially `schema-v2.sql` depending on which one is intended for use) to create the necessary database tables.  Use a database client (like MySQL Workbench, pgAdmin, or similar) to connect to your database and run the script.
+    Execute the SQL schema located in `schema-v2.sql` to create the necessary database tables.  Use a database client (like MySQL Workbench, pgAdmin, or similar) to connect to your database and run the script.
 
 5.  **Start the application:**
 
